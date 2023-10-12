@@ -1,0 +1,4 @@
+numpy
+requests
+xarray
+bs4

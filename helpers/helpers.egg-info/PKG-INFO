@@ -1,0 +1,10 @@
+Metadata-Version: 2.1
+Name: helpers
+Version: 0.0.1
+Summary: Some miscellaneous helper functions for oceanographic data anlysis.
+Author-email: Andrew Scherer <scherand@oregonstate.edu>
+Maintainer-email: Andrew Scherer <scherand@oregonstate.edu>
+Requires-Dist: numpy
+Requires-Dist: requests
+Requires-Dist: xarray
+Requires-Dist: bs4

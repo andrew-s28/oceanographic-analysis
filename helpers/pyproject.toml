@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "helpers"
+authors = [
+    {name = 'Andrew Scherer', email = 'scherand@oregonstate.edu'}
+]
+maintainers = [
+    {name = 'Andrew Scherer', email = 'scherand@oregonstate.edu'}
+]
+version = "0.0.1"
+description = 'Some miscellaneous helper functions for oceanographic data anlysis.'
+dependencies = ['numpy', 'requests', 'xarray', 'bs4']
+
+
+

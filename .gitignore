@@ -1,0 +1,6 @@
+analysis/
+*/test.ipynb
+*/shelf_nitrate_download.ipynb
+
+*pycache*
+*.code-workspace
