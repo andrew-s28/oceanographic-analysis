@@ -337,20 +337,23 @@ def nutnr_qc(ds, rmse_lim=1000):
     mask = np.full(ds.time.shape, True, dtype=bool)
     for i in range(len(temp.time)):
         # remove fits if any values are nan or inf
-        if np.any(~np.isfinite(temp.spectral_channels[i] - temp.nutnr_dark_value_used_for_fit[i])):
+        if np.any(~np.isfinite(temp.spectral_channels[i] - temp.dark_val[i])):
+            mask[i] = False
+        # remove anomalously low salinity values
+        elif ds.salinity[i] <= 20:
             mask[i] = False
         # remove fits where mean is near zero
         elif (ds.spectral_channels[i].mean() > 1000):
-            (a, b), pcov = (curve_fit(lambda x, a, b: a*x + b,
-                                      temp.wavelength,
-                                      temp.spectral_channels[i] - temp.nutnr_dark_value_used_for_fit[i]))
-            residuals = temp.spectral_channels[i] - temp.nutnr_dark_value_used_for_fit[i] - temp.wavelength*a - b
+            (a, b), pcov = curve_fit(lambda x, a, b: a*x + b,
+                                     temp.wavelength,
+                                     temp.spectral_channels[i] - temp.dark_val[i])
+            residuals = temp.spectral_channels[i] - temp.dark_val[i] - temp.wavelength*a - b
             rmse = ((np.sum(residuals**2)/(residuals.size-2))**0.5).values
             # remove fits with high rmse for linear fit in wavelength range
             if rmse > rmse_lim:
                 mask[i] = False
             # remove fits with any negative values in wavelength range
-            elif np.any(temp.spectral_channels[i] - temp.nutnr_dark_value_used_for_fit[i] < 0):
+            elif np.any(temp.spectral_channels[i] - temp.dark_val[i] < 0):
                 mask[i] = False
             # remove fits that did not converge
             elif np.any(~np.isfinite(pcov)):
