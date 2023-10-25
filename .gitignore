@@ -9,6 +9,8 @@ analysis/
 */shelf_nitrate_download.ipynb
 *pycache*
 *.egg-info
+*helpers.egg-info/
+*.nc
 
 # User-specific files
 *.rsuser
