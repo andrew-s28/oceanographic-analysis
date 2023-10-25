@@ -1,44 +1,50 @@
-# input/output, html parsing, requests, and os functionality
+"""
+A script to download NDBC data, compute wind stress, rotate into principal axes, and daily average.
+"""
+import argparse
 import io
+import numpy as np
 import os
+from pycoare.coare import c35
 import requests
 from tqdm import tqdm as tq
-import numpy as np
-import xarray as xr
-from pycoare.coare import c35
 import util
 import warnings
+import xarray as xr
 
-# get nitrate data
-print("Newport South Beach - NWPO3")
-print("Oregon Shelf - 46097")
-print("Oregon Offshore - 46050")
-print("Enter NDBC site code: ", end='')
-site = input()
+# parse command line arguments
+parser = argparse.ArgumentParser(description="Download NDBC data, compute wind stress,"
+                                 + " rotate into principal axes, and daily average.")
+parser.add_argument('station', metavar='station', type=str, nargs=1,
+                    help="station ID to download data from")
+parser.add_argument('-p', '--path', metavar='path', type=str, nargs='?',
+                    help="path to folder for output files",
+                    default='./output/')
+parser.add_argument('-f', '--file', metavar='file', type=str, nargs='?',
+                    help="file name for output file, do not include .nc",
+                    default=None)
+args = parser.parse_args()
+args = vars(args)
+site = args['station'][0].lower()
+out_path = args['path']
+out_file = args['file']
 
-if site == '46050':
-    zt = 3.7
-    zu = 4.1
-elif site == '46097':
-    zt = 4.0
-    zu = 4.5
-elif site == 'NWPO3':
-    zt = 6.4+9.1
-    zu = 9.4+9.1
-else:
-    print('Bad site selection.')
-    exit(1)
+# get ndbc site metadata for instrument elevation
+ndbc_site_url = 'https://www.ndbc.noaa.gov/station_page.php?station=' + site
+elev, zt, zu, zb, zt_sea, depth, radius = util.ndbc_heights(ndbc_site_url)
+zt = zt + elev
+zu = zu + elev
+zb = zb + elev
 
-# setup defaults to use in subsequent data queries
+# get all available files
 url = "https://dods.ndbc.noaa.gov/thredds/catalog/data/stdmet/" + site + "/catalog.html"
-
-tag = r'[1-2][0-9][0-9][0-9].*\.nc$'  # setup regex for files we want (*=anything,$=end of line)
+tag = r'[1-2][0-9][0-9][0-9].*\.nc$'
 nc_files = util.list_files(url, tag)
 file_url = 'https://dods.ndbc.noaa.gov/thredds/fileServer/'
-nc_url = [file_url + i + '#mode=bytes' for i in nc_files]  # combine files, add mode to ensure download works
+nc_url = [file_url + i + '#mode=bytes' for i in nc_files]
 
 # load datasets
-ds = []  # empty arrays for datasets
+ds = []
 for i, f in (enumerate(tq(nc_url, desc='Downloading datasets'))):
     r = requests.get(f, timeout=(3.05, 120))
     # ensure request worked
@@ -46,7 +52,7 @@ for i, f in (enumerate(tq(nc_url, desc='Downloading datasets'))):
         ds.append(xr.load_dataset(io.BytesIO(r.content)))
         ds[i].load()
 
-# some renaming and new variables
+# replace bad values
 for i, d in enumerate(ds):
     ds[i] = ds[i].squeeze()
     ds[i]['rh'] = util.relative_humidity_from_dewpoint(
@@ -59,12 +65,14 @@ for i, d in enumerate(ds):
     ds[i]['sea_surface_temperature'] = ds[i]['sea_surface_temperature'].where(
         ds[i]['sea_surface_temperature'] < 500, 12.5)
 
+# compute wind stress
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", message="divide by zero encountered in divide")
     warnings.filterwarnings("ignore", message="invalid value encountered in power")
+    warnings.filterwarnings("ignore", message="overflow encountered in exp")
+    warnings.filterwarnings("ignore", message="invalid value encountered in log")
     for i, d in enumerate(ds):
-        ds[i]['wind_east'], ds[i]['wind_north'] = util.uv_from_spddir(ds[i]['wind_spd'],
-                                                                      ds[i]['wind_dir'])
+        ds[i]['wind_east'], ds[i]['wind_north'] = util.uv_from_spddir(ds[i]['wind_spd'], ds[i]['wind_dir'])
         coare_mag = c35(ds[i]['wind_spd'].values,
                         t=ds[i]['air_temperature'].values,
                         rh=ds[i]['rh'],
@@ -78,11 +86,13 @@ with warnings.catch_warnings():
 east = np.array([item for sublist in ds for item in sublist['wind_east'].values])
 north = np.array([item for sublist in ds for item in sublist['wind_north'].values])
 
+# rotate wind velocity and wind stress into principal axis
 theta, major, minor = util.princax(east, north)
 for i, d in enumerate(ds):
     ds[i]['cs'], ds[i]['as'] = util.rot(d['wind_east'], d['wind_north'], theta)
     ds[i]['coare_x'], ds[i]['coare_y'] = util.rot(d['coare_east'], d['coare_north'], theta)
 
+# add metadata
 for i, d in enumerate(ds):
     ds[i]['wind_east'].attrs = {'comment': 'Eastwards wind velocity',
                                 'units': 'm/s'}
@@ -104,22 +114,32 @@ for i, d in enumerate(ds):
                               'units': 'm/s'}
     ds[i]['coare_y'].attrs = {'comment': 'Along-shelf component of wind stress computed by principal axis',
                               'units': 'm/s'}
-    ds[i].attrs = {'Principal axis angle': f'{theta + 270} deg CW of true north'}
+    ds[i].attrs = {'Site Elevation (m)': f'{elev:.02f}',
+                   'Air temp height (m)': f'{zt:.02f}',
+                   'Anemometer height (m)': f'{zu:.02f}',
+                   'Barometer height (m)': f'{zb:.02f}',
+                   'Sea temp depth (m)': f'{zt_sea:.02f}',
+                   'Water depth (m)': f'{depth:.02f}',
+                   'Watch radius (m)': f'{radius:02f}',
+                   'Principal axis (deg CW of true north)': f'{theta + 270:.02f}'}
 
-# resample to 1D time intervals with mean method
+# resample to 1D time intervals with mean method and concatenate datasets
 datasets = []
 for i, d in enumerate(ds):
     datasets.append(d.resample(time="1D").mean(skipna=True))
-
 ds_bin = xr.concat(datasets, dim='time')
 
-print("Enter name for output nc file: ", end='')
-out_name = input()
+# setup output folders
+if not os.path.exists(out_path):
+    os.mkdir(out_path)
+if not os.path.exists(os.path.join(out_path, 'raw')):
+    os.mkdir(os.path.join(out_path, 'raw'))
+if out_file is None:
+    out_file = site + '_wind_binned.nc'
+else:
+    out_file = out_file + '.nc'
 
-if not os.path.exists('./output/'):
-    os.mkdir('./output/')
-
-ds_bin.to_netcdf('./output/' + out_name + '.nc')
-
+# save output files
+ds_bin.to_netcdf(os.path.join(out_path, out_file))
 for i, d in enumerate(ds):
-    d.to_netcdf('./output/' + nc_files[i][-13:-3] + '.nc')
+    d.to_netcdf(os.path.join(out_path, 'raw', nc_files[i][-13:-3] + '.nc'))
