@@ -236,7 +236,6 @@ def ndbc_heights(url):
         # find watch circle radius
         m_var = re.search(r'Watch circle radius: \d+\.?\d*', i)
         if m_var:
-            print(m_var.string[m_var.start():m_var.end()])
             m_val = re.search(r'\d+\.?\d*', m_var.string[m_var.start():m_var.end()])
             if m_val:
                 rad_val = float(m_val.string[m_val.start(): m_val.end()])/1.094
