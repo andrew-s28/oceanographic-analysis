@@ -127,7 +127,7 @@ for i, d in enumerate(ds):
 datasets = []
 for i, d in enumerate(ds):
     datasets.append(d.resample(time="1D").mean(skipna=True))
-ds_bin = xr.concat(datasets, dim='time')
+ds_bin = xr.concat(datasets, dim='time').drop_duplicates('time')
 
 # setup output folders
 if not os.path.exists(out_path):
