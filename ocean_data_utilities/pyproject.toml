@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "helpers"
+name = "ocean_data_utilities"
 authors = [
     {name = 'Andrew Scherer', email = 'scherand@oregonstate.edu'}
 ]

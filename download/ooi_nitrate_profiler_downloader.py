@@ -8,7 +8,7 @@ import numpy as np
 import os
 import requests
 from tqdm import tqdm as tq
-import util
+from ocean_data_utilities import util
 import xarray as xr
 
 # parse command line arguments
