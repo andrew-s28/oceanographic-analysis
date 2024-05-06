@@ -1,15 +1,24 @@
 """
 Download OOI Endurance Array profiler nitrate data, QC fits, bin, and save.
+
 """
+# Python Standard Library
 import argparse
-import gsw
 import io
+import os
+import re
+import warnings
+
+# External Modules
+from bs4 import BeautifulSoup
+import gsw
 from joblib import Parallel, delayed
 import numpy as np
-import os
 import requests
+from scipy.optimize import curve_fit
 from tqdm import tqdm as tq
 import xarray as xr
+from flox.xarray import xarray_reduce
 
 
 class ParallelTqdm(Parallel):
@@ -123,10 +132,6 @@ def list_files(url, tag=r'.*\.nc$') -> list[str]:
     Returns:
         array: list of files in the catalog with the URL path set relative to the catalog
     """
-    from bs4 import BeautifulSoup
-    import re
-    import requests
-
     with requests.session() as s:
         page = s.get(url).text
 
@@ -145,10 +150,6 @@ def nutnr_qc(ds, rmse_lim=1000) -> xr.Dataset:
         ds (Dataset): OOI nutnr dataset
         rmse_lim (int, optional): Maximum RMSE for fit to be kept. Defaults to 1000.
     """
-    from scipy.optimize import curve_fit
-    import warnings
-    import xarray as xr
-
     # covariance issues are explicitly handled by checking if pcov is finite
     warnings.filterwarnings("ignore", message="Covariance of the parameters could not be estimated")
 
@@ -237,9 +238,6 @@ def profiler_binning(d, z, z_lab='depth', t_lab='time', offset=0.5):
     Returns:
         xr.dataset: binned dataset
     """
-    from flox.xarray import xarray_reduce
-    import warnings
-
     types = [d[i].dtype for i in d]
     vars = list(d.keys())
     exclude = []
@@ -271,8 +269,9 @@ def profiler_binning(d, z, z_lab='depth', t_lab='time', offset=0.5):
 
 if __name__ == '__main__':
     # parse command line arguments
-    parser = argparse.ArgumentParser(description="Download OOI Endurance Array profiler nitrate data,"
-                                     + " QC fits, bin, and save.")
+    parser = argparse.ArgumentParser(
+        description="Download OOI Endurance Array profiler nitrate data, QC fits, bin, and save."
+    )
     parser.add_argument('site', metavar='site', type=str, nargs=1,
                         help="site to download from, either CE01ISSP or CE02SHSP")
     parser.add_argument('-p', '--path', metavar='path', type=str, nargs='?',
